@@ -1,0 +1,55 @@
+import axios from 'axios';
+import { useUserStore } from '../stores/index.js';
+import type { Workspace, Booking } from '../types/index.js';
+
+const API_BASE = '/api';
+
+const api = axios.create({
+  baseURL: API_BASE,
+});
+
+// Add token to requests
+api.interceptors.request.use((config) => {
+  const token = useUserStore.getState().token;
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+// Auth endpoints
+export const authService = {
+  register: (data: { email: string; name: string; password: string; role?: 'guest' | 'host' }) =>
+    api.post('/auth/register', data),
+  login: (data: { email: string; password: string }) =>
+    api.post('/auth/login', data),
+  logout: () => api.post('/auth/logout'),
+  getMe: () => api.get('/auth/me'),
+  verify: (token: string) => api.post('/auth/verify', { token }),
+};
+
+export const workspaceService = {
+  getAll: () => api.get<Workspace[]>('/workspaces'),
+  getById: (id: string) => api.get<Workspace>(`/workspaces/${id}`),
+  getMyWorkspaces: () => api.get<Workspace[]>('/my-workspaces'),
+  search: (location: string) =>
+    api.get<Workspace[]>(`/workspaces/search/location?location=${location}`),
+  create: (data: Omit<Workspace, 'id' | 'createdAt' | 'updatedAt'>) =>
+    api.post<Workspace>('/workspaces', data),
+  update: (id: string, data: Partial<Workspace>) =>
+    api.patch<Workspace>(`/workspaces/${id}`, data),
+  delete: (id: string) => api.delete(`/workspaces/${id}`),
+};
+
+export const bookingService = {
+  getById: (id: string) => api.get<Booking>(`/bookings/${id}`),
+  getMyBookings: () => api.get<Booking[]>('/my-bookings'),
+  getWorkspaceBookings: (workspaceId: string) => 
+    api.get<Booking[]>(`/workspaces/${workspaceId}/bookings`),
+  create: (data: Omit<Booking, 'id' | 'createdAt' | 'updatedAt'>) =>
+    api.post<Booking>('/bookings', data),
+  updateStatus: (id: string, status: Booking['status']) =>
+    api.patch<Booking>(`/bookings/${id}/status`, { status }),
+};
+
+export const healthCheck = () => api.get('/health');

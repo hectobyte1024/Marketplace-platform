@@ -1,0 +1,4 @@
+import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
+export const WorkspaceCard = ({ id, name, location, hourlyRate, capacity, images }) => {
+    return (_jsxs("div", { className: "border rounded-lg overflow-hidden shadow-md hover:shadow-lg transition-shadow", children: [images.length > 0 && (_jsx("img", { src: images[0], alt: name, className: "w-full h-48 object-cover" })), _jsxs("div", { className: "p-4", children: [_jsx("h3", { className: "text-lg font-bold mb-2", children: name }), _jsx("p", { className: "text-gray-600 mb-2", children: location }), _jsxs("div", { className: "flex justify-between items-center", children: [_jsxs("span", { className: "text-blue-600 font-bold", children: ["$", hourlyRate, "/hr"] }), _jsxs("span", { className: "text-sm text-gray-500", children: ["Capacity: ", capacity] })] })] })] }));
+};
