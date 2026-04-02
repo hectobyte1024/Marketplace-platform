@@ -41,15 +41,44 @@ export const workspaceService = {
   delete: (id: string) => api.delete(`/workspaces/${id}`),
 };
 
+export interface PricingRule {
+  id: string;
+  workspaceId: string;
+  dayOfWeek?: number;
+  seasonType?: 'peak' | 'shoulder' | 'low';
+  multiplier: number;
+  createdAt: Date;
+}
+
 export const bookingService = {
   getById: (id: string) => api.get<Booking>(`/bookings/${id}`),
   getMyBookings: () => api.get<Booking[]>('/my-bookings'),
-  getWorkspaceBookings: (workspaceId: string) => 
+  getByWorkspace: (workspaceId: string) =>
     api.get<Booking[]>(`/workspaces/${workspaceId}/bookings`),
   create: (data: Omit<Booking, 'id' | 'createdAt' | 'updatedAt'>) =>
     api.post<Booking>('/bookings', data),
-  updateStatus: (id: string, status: Booking['status']) =>
+  updateStatus: (id: string, status: string) =>
     api.patch<Booking>(`/bookings/${id}/status`, { status }),
+};
+
+export const pricingService = {
+  getRules: (workspaceId: string) =>
+    api.get<PricingRule[]>(`/workspaces/${workspaceId}/pricing`),
+  createRule: (workspaceId: string, data: Omit<PricingRule, 'id' | 'createdAt'>) =>
+    api.post<PricingRule>(`/workspaces/${workspaceId}/pricing`, data),
+  updateRule: (id: string, data: Partial<PricingRule>) =>
+    api.patch<PricingRule>(`/pricing-rules/${id}`, data),
+  deleteRule: (id: string) => api.delete(`/pricing-rules/${id}`),
+  calculatePrice: (workspaceId: string, startDate: Date, endDate: Date) =>
+    api.post<{
+      baseRate: number;
+      totalPrice: number;
+      hours: number;
+      rules: PricingRule[];
+    }>(`/workspaces/${workspaceId}/calculate-price`, {
+      startDate,
+      endDate,
+    }),
 };
 
 export const healthCheck = () => api.get('/health');

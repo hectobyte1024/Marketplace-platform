@@ -4,6 +4,15 @@ import type { Workspace, Booking, User } from '../types/index.js';
 // Import query at module level for DELETE
 const deleteQuery = query;
 
+export interface PricingRule {
+  id: string;
+  workspaceId: string;
+  dayOfWeek?: number; // 0-6 (Sunday-Saturday)
+  seasonType?: 'peak' | 'shoulder' | 'low';
+  multiplier: number;
+  createdAt: Date;
+}
+
 export class WorkspaceService {
   async getAll() {
     const result = await query('SELECT * FROM workspaces ORDER BY created_at DESC');
@@ -142,5 +151,85 @@ export class UserService {
       [user.email, user.name, user.passwordHash, user.role]
     );
     return result.rows[0];
+  }
+}
+
+export class PricingService {
+  async getByWorkspace(workspaceId: string) {
+    const result = await query(
+      'SELECT * FROM pricing_rules WHERE workspace_id = $1 ORDER BY day_of_week, season_type',
+      [workspaceId]
+    );
+    return result.rows;
+  }
+
+  async create(rule: Omit<PricingRule, 'id' | 'createdAt'>) {
+    const result = await query(
+      `INSERT INTO pricing_rules (workspace_id, day_of_week, season_type, multiplier)
+       VALUES ($1, $2, $3, $4)
+       RETURNING *`,
+      [rule.workspaceId, rule.dayOfWeek, rule.seasonType, rule.multiplier]
+    );
+    return result.rows[0];
+  }
+
+  async update(id: string, updates: Partial<PricingRule>) {
+    const fields: string[] = [];
+    const values: any[] = [];
+    let paramCount = 1;
+
+    Object.entries(updates).forEach(([key, value]) => {
+      if (value !== undefined && key !== 'id' && key !== 'createdAt' && key !== 'workspaceId') {
+        fields.push(`${key} = $${paramCount}`);
+        values.push(value);
+        paramCount++;
+      }
+    });
+
+    if (fields.length === 0) return null;
+
+    values.push(id);
+    const result = await query(
+      `UPDATE pricing_rules SET ${fields.join(', ')} WHERE id = $${paramCount} RETURNING *`,
+      values
+    );
+    return result.rows[0];
+  }
+
+  async delete(id: string) {
+    const result = await query('DELETE FROM pricing_rules WHERE id = $1', [id]);
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  // Calculate dynamic price based on rules
+  calculatePrice(baseRate: number, rules: PricingRule[], startDate: Date): number {
+    let multiplier = 1;
+
+    // Check day of week
+    const dayOfWeek = startDate.getDay();
+    const dayRule = rules.find((r) => r.dayOfWeek === dayOfWeek && !r.seasonType);
+    if (dayRule) {
+      multiplier *= dayRule.multiplier;
+    }
+
+    // Check season (simplified - based on month)
+    const month = startDate.getMonth();
+    let season: 'peak' | 'shoulder' | 'low';
+    if ([6, 7].includes(month)) {
+      // July, August = peak
+      season = 'peak';
+    } else if ([0, 11, 5, 12].includes(month)) {
+      // Jan, Dec, Jun, May = shoulder
+      season = 'shoulder';
+    } else {
+      season = 'low';
+    }
+
+    const seasonRule = rules.find((r) => r.seasonType === season && r.dayOfWeek === undefined);
+    if (seasonRule) {
+      multiplier *= seasonRule.multiplier;
+    }
+
+    return Math.round(baseRate * multiplier * 100) / 100;
   }
 }

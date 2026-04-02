@@ -32,8 +32,18 @@ export const workspaceService = {
 export const bookingService = {
     getById: (id) => api.get(`/bookings/${id}`),
     getMyBookings: () => api.get('/my-bookings'),
-    getWorkspaceBookings: (workspaceId) => api.get(`/workspaces/${workspaceId}/bookings`),
+    getByWorkspace: (workspaceId) => api.get(`/workspaces/${workspaceId}/bookings`),
     create: (data) => api.post('/bookings', data),
     updateStatus: (id, status) => api.patch(`/bookings/${id}/status`, { status }),
+};
+export const pricingService = {
+    getRules: (workspaceId) => api.get(`/workspaces/${workspaceId}/pricing`),
+    createRule: (workspaceId, data) => api.post(`/workspaces/${workspaceId}/pricing`, data),
+    updateRule: (id, data) => api.patch(`/pricing-rules/${id}`, data),
+    deleteRule: (id) => api.delete(`/pricing-rules/${id}`),
+    calculatePrice: (workspaceId, startDate, endDate) => api.post(`/workspaces/${workspaceId}/calculate-price`, {
+        startDate,
+        endDate,
+    }),
 };
 export const healthCheck = () => api.get('/health');

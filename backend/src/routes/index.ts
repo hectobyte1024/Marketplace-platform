@@ -1,6 +1,6 @@
 import express, { Request, Response } from 'express';
 import { query } from '../database/connection.js';
-import { WorkspaceService, BookingService, UserService } from '../services/index.js';
+import { WorkspaceService, BookingService, UserService, PricingService } from '../services/index.js';
 import authRoutes, { authMiddleware } from './auth.js';
 import { emitToUser, emitToWorkspace, broadcastBookingUpdate } from '../socket.js';
 
@@ -8,6 +8,7 @@ const router = express.Router();
 const workspaceService = new WorkspaceService();
 const bookingService = new BookingService();
 const userService = new UserService();
+const pricingService = new PricingService();
 
 // Mount auth routes
 router.use('/auth', authRoutes);
@@ -111,6 +112,126 @@ router.delete('/workspaces/:id', authMiddleware, async (req: Request, res: Respo
     res.json({ message: 'Workspace deleted successfully' });
   } catch (error) {
     res.status(500).json({ error: 'Failed to delete workspace' });
+  }
+});
+
+// PRICING RULES
+router.get('/workspaces/:workspaceId/pricing', async (req: Request, res: Response) => {
+  try {
+    const { workspaceId } = req.params;
+    const workspace = await workspaceService.getById(workspaceId);
+    if (!workspace) {
+      return res.status(404).json({ error: 'Workspace not found' });
+    }
+    const rules = await pricingService.getByWorkspace(workspaceId);
+    res.json(rules);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch pricing rules' });
+  }
+});
+
+// POST create pricing rule (host only)
+router.post('/workspaces/:workspaceId/pricing', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const { workspaceId } = req.params;
+    const workspace = await workspaceService.getById(workspaceId);
+    if (!workspace) {
+      return res.status(404).json({ error: 'Workspace not found' });
+    }
+
+    // Check ownership
+    if (workspace.owner_id !== req.userId!) {
+      return res.status(403).json({ error: 'You can only manage pricing for your own workspaces' });
+    }
+
+    const rule = await pricingService.create({
+      workspaceId,
+      ...req.body,
+    });
+    res.status(201).json(rule);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to create pricing rule' });
+  }
+});
+
+// PATCH update pricing rule (host only)
+router.patch('/pricing-rules/:id', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const rule = await query('SELECT * FROM pricing_rules WHERE id = $1', [req.params.id]);
+    if (rule.rows.length === 0) {
+      return res.status(404).json({ error: 'Pricing rule not found' });
+    }
+
+    const pricingRule = rule.rows[0];
+    const workspace = await workspaceService.getById(pricingRule.workspace_id);
+
+    // Check ownership
+    if (workspace.owner_id !== req.userId!) {
+      return res.status(403).json({ error: 'You can only modify your own pricing rules' });
+    }
+
+    const updated = await pricingService.update(req.params.id, req.body);
+    res.json(updated);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update pricing rule' });
+  }
+});
+
+// DELETE pricing rule (host only)
+router.delete('/pricing-rules/:id', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const rule = await query('SELECT * FROM pricing_rules WHERE id = $1', [req.params.id]);
+    if (rule.rows.length === 0) {
+      return res.status(404).json({ error: 'Pricing rule not found' });
+    }
+
+    const pricingRule = rule.rows[0];
+    const workspace = await workspaceService.getById(pricingRule.workspace_id);
+
+    // Check ownership
+    if (workspace.owner_id !== req.userId!) {
+      return res.status(403).json({ error: 'You can only delete your own pricing rules' });
+    }
+
+    await pricingService.delete(req.params.id);
+    res.json({ message: 'Pricing rule deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete pricing rule' });
+  }
+});
+
+// POST calculate price for dates
+router.post('/workspaces/:workspaceId/calculate-price', async (req: Request, res: Response) => {
+  try {
+    const { workspaceId } = req.params;
+    const { startDate, endDate } = req.body;
+
+    if (!startDate || !endDate) {
+      return res.status(400).json({ error: 'startDate and endDate are required' });
+    }
+
+    const workspace = await workspaceService.getById(workspaceId);
+    if (!workspace) {
+      return res.status(404).json({ error: 'Workspace not found' });
+    }
+
+    const rules = await pricingService.getByWorkspace(workspaceId);
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+
+    // Calculate price for first day (simplified - could be per-day for more accuracy)
+    const dailyRate = pricingService.calculatePrice(workspace.hourly_rate, rules, start) * 24;
+    const totalPrice = Math.round(dailyRate * (hours / 24) * 100) / 100;
+
+    res.json({
+      baseRate: workspace.hourly_rate,
+      totalPrice,
+      hours,
+      rules,
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to calculate price' });
   }
 });
 

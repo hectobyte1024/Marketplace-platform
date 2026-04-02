@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { workspaceService } from '../services/api.js';
 import { WorkspaceForm } from '../components/WorkspaceForm.js';
+import { PricingRules } from '../components/PricingRules.js';
 import type { Workspace } from '../types/index.js';
 
 export const MyWorkspaces: React.FC = () => {
@@ -10,6 +11,7 @@ export const MyWorkspaces: React.FC = () => {
   const [showForm, setShowForm] = useState(false);
   const [editingWorkspace, setEditingWorkspace] = useState<Workspace | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [showPricingId, setShowPricingId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchWorkspaces();
@@ -140,7 +142,7 @@ export const MyWorkspaces: React.FC = () => {
                     </div>
                   )}
 
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 mb-4">
                     <button
                       onClick={() => {
                         setEditingWorkspace(workspace);
@@ -149,6 +151,12 @@ export const MyWorkspaces: React.FC = () => {
                       className="flex-1 bg-blue-500 text-white py-2 rounded hover:bg-blue-600 text-sm"
                     >
                       Edit
+                    </button>
+                    <button
+                      onClick={() => setShowPricingId(showPricingId === workspace.id ? null : workspace.id)}
+                      className={`flex-1 ${showPricingId === workspace.id ? 'bg-purple-600' : 'bg-purple-500'} text-white py-2 rounded hover:bg-purple-600 text-sm`}
+                    >
+                      Pricing
                     </button>
                     {deleteConfirm === workspace.id ? (
                       <div className="flex-1 bg-red-100 rounded p-2 text-center">
@@ -177,6 +185,12 @@ export const MyWorkspaces: React.FC = () => {
                       </button>
                     )}
                   </div>
+
+                  {showPricingId === workspace.id && (
+                    <div className="border-t pt-4 mt-4">
+                      <PricingRules workspaceId={workspace.id} />
+                    </div>
+                  )}
                 </div>
               </div>
             ))}

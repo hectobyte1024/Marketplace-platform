@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Workspace, Booking } from '../types/index.js';
-import { bookingService } from '../services/api.js';
+import { bookingService, pricingService } from '../services/api.js';
 
 interface BookingFormProps {
   workspace: Workspace;
@@ -15,16 +15,37 @@ export const BookingForm: React.FC<BookingFormProps> = ({ workspace, onSuccess, 
   const [endTime, setEndTime] = useState('01:00');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [calculatedPrice, setCalculatedPrice] = useState<number | null>(null);
+  const [pricingDetails, setPricingDetails] = useState<any>(null);
 
-  const calculatePrice = () => {
-    if (!startDate || !endDate || !startTime || !endTime) return 0;
+  // Calculate price whenever dates change
+  useEffect(() => {
+    const calculatePrice = async () => {
+      if (!startDate || !endDate || !startTime || !endTime) {
+        setCalculatedPrice(null);
+        setPricingDetails(null);
+        return;
+      }
 
-    const start = new Date(`${startDate}T${startTime}`);
-    const end = new Date(`${endDate}T${endTime}`);
-    const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
-    
-    return hours > 0 ? Math.round(hours * workspace.hourlyRate * 100) / 100 : 0;
-  };
+      try {
+        const start = new Date(`${startDate}T${startTime}:00Z`);
+        const end = new Date(`${endDate}T${endTime}:00Z`);
+
+        if (start >= end) {
+          setCalculatedPrice(null);
+          return;
+        }
+
+        const response = await pricingService.calculatePrice(workspace.id, start, end);
+        setCalculatedPrice(response.data.totalPrice);
+        setPricingDetails(response.data);
+      } catch (err) {
+        console.error('Price calculation error:', err);
+      }
+    };
+
+    calculatePrice();
+  }, [startDate, startTime, endDate, endTime, workspace.id]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,12 +72,18 @@ export const BookingForm: React.FC<BookingFormProps> = ({ workspace, onSuccess, 
         return;
       }
 
+      if (!calculatedPrice) {
+        setError('Unable to calculate price');
+        setLoading(false);
+        return;
+      }
+
       const response = await bookingService.create({
         workspaceId: workspace.id,
         guestId: '', // Set by backend
         startDate: start,
         endDate: end,
-        totalPrice: calculatePrice(),
+        totalPrice: calculatedPrice,
         status: 'pending',
       });
 
@@ -69,7 +96,7 @@ export const BookingForm: React.FC<BookingFormProps> = ({ workspace, onSuccess, 
   };
 
   const minDate = new Date().toISOString().split('T')[0];
-  const totalPrice = calculatePrice();
+  const totalPrice = calculatedPrice;
 
   return (
     <div className="bg-white p-6 rounded-lg border border-gray-200">
@@ -132,14 +159,39 @@ export const BookingForm: React.FC<BookingFormProps> = ({ workspace, onSuccess, 
           </div>
         </div>
 
-        <div className="bg-gray-50 p-4 rounded-lg">
-          <div className="flex justify-between items-center text-sm mb-2">
-            <span className="text-gray-600">Hourly Rate:</span>
+        <div className="bg-gray-50 p-4 rounded-lg space-y-2">
+          <div className="flex justify-between items-center text-sm">
+            <span className="text-gray-600">Base Hourly Rate:</span>
             <span className="font-medium">${workspace.hourlyRate.toFixed(2)}/hr</span>
           </div>
+
+          {pricingDetails && pricingDetails.rules && pricingDetails.rules.length > 0 && (
+            <div className="text-xs pt-2 border-t">
+              <span className="text-gray-600 block mb-1">Dynamic Pricing Rules Applied:</span>
+              {pricingDetails.rules.map((rule: any, idx: number) => (
+                <div key={idx} className="text-gray-600 ml-2">
+                  • {rule.dayOfWeek !== undefined ? `Weekday ${rule.dayOfWeek}` : rule.seasonType}
+                  : {rule.multiplier}x multiplier
+                </div>
+              ))}
+            </div>
+          )}
+
+          {pricingDetails && (
+            <div className="text-xs pt-2 border-t">
+              <span className="text-gray-600">
+                Duration: {pricingDetails.hours.toFixed(1)} hours
+              </span>
+            </div>
+          )}
+
           <div className="border-t pt-2 flex justify-between items-center">
             <span className="text-lg font-semibold">Total Price:</span>
-            <span className="text-2xl font-bold text-blue-600">${totalPrice.toFixed(2)}</span>
+            {totalPrice ? (
+              <span className="text-2xl font-bold text-blue-600">${totalPrice.toFixed(2)}</span>
+            ) : (
+              <span className="text-gray-400">Select dates</span>
+            )}
           </div>
         </div>
 
@@ -152,7 +204,7 @@ export const BookingForm: React.FC<BookingFormProps> = ({ workspace, onSuccess, 
         <div className="flex gap-3 pt-4">
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || !totalPrice}
             className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition"
           >
             {loading ? 'Creating booking...' : 'Complete Booking'}
