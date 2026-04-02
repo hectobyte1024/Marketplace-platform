@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { useUserStore } from '../stores/index.js';
-import type { Workspace, Booking } from '../types/index.js';
+import type { Workspace, Booking, AvailabilitySlot } from '../types/index.js';
 
 const API_BASE = '/api';
 
@@ -79,6 +79,23 @@ export const pricingService = {
       startDate,
       endDate,
     }),
+};
+
+export const availabilityService = {
+  getSlots: (workspaceId: string) =>
+    api.get<AvailabilitySlot[]>(`/workspaces/${workspaceId}/availability`),
+  checkAvailability: (workspaceId: string, startDate: Date, endDate: Date) =>
+    api.post<{ available: boolean }>(`/workspaces/${workspaceId}/check-availability`, {
+      startDate,
+      endDate,
+    }),
+  createSlot: (
+    workspaceId: string,
+    data: Omit<AvailabilitySlot, 'id' | 'createdAt' | 'updatedAt' | 'createdBy'>
+  ) => api.post<AvailabilitySlot>(`/workspaces/${workspaceId}/availability`, data),
+  updateSlot: (id: string, data: Partial<AvailabilitySlot>) =>
+    api.patch<AvailabilitySlot>(`/availability-slots/${id}`, data),
+  deleteSlot: (id: string) => api.delete(`/availability-slots/${id}`),
 };
 
 export const healthCheck = () => api.get('/health');

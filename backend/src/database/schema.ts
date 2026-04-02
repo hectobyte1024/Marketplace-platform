@@ -59,10 +59,25 @@ const initSchema = async () => {
       UNIQUE(workspace_id, date)
     )`,
 
+    `CREATE TABLE IF NOT EXISTS availability_slots (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      workspace_id UUID NOT NULL REFERENCES workspaces(id),
+      start_date TIMESTAMP NOT NULL,
+      end_date TIMESTAMP NOT NULL,
+      is_available BOOLEAN NOT NULL DEFAULT true,
+      recurring_pattern VARCHAR(50),
+      recurring_count INTEGER,
+      created_by UUID NOT NULL REFERENCES users(id),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`,
+
     `CREATE INDEX IF NOT EXISTS idx_workspaces_owner ON workspaces(owner_id)`,
     `CREATE INDEX IF NOT EXISTS idx_bookings_guest ON bookings(guest_id)`,
     `CREATE INDEX IF NOT EXISTS idx_bookings_workspace ON bookings(workspace_id)`,
     `CREATE INDEX IF NOT EXISTS idx_availability_workspace ON availability(workspace_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_availability_slots_workspace ON availability_slots(workspace_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_availability_slots_dates ON availability_slots(start_date, end_date)`,
   ];
 
   for (const sql of queries) {

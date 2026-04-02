@@ -1,6 +1,6 @@
 import express, { Request, Response } from 'express';
 import { query } from '../database/connection.js';
-import { WorkspaceService, BookingService, UserService, PricingService } from '../services/index.js';
+import { WorkspaceService, BookingService, UserService, PricingService, AvailabilityService } from '../services/index.js';
 import authRoutes, { authMiddleware } from './auth.js';
 import { emitToUser, emitToWorkspace, broadcastBookingUpdate } from '../socket.js';
 
@@ -9,6 +9,7 @@ const workspaceService = new WorkspaceService();
 const bookingService = new BookingService();
 const userService = new UserService();
 const pricingService = new PricingService();
+const availabilityService = new AvailabilityService();
 
 // Mount auth routes
 router.use('/auth', authRoutes);
@@ -405,6 +406,152 @@ router.patch('/bookings/:id/status', authMiddleware, async (req: Request, res: R
     res.json(updated);
   } catch (error) {
     res.status(500).json({ error: 'Failed to update booking' });
+  }
+});
+
+// Availability Slots
+router.get('/workspaces/:workspaceId/availability', async (req: Request, res: Response) => {
+  try {
+    const { workspaceId } = req.params;
+    const slots = await availabilityService.getByWorkspace(workspaceId);
+    res.json(slots);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch availability slots' });
+  }
+});
+
+// Check availability for date range
+router.post('/workspaces/:workspaceId/check-availability', async (req: Request, res: Response) => {
+  try {
+    const { workspaceId } = req.params;
+    const { startDate, endDate } = req.body;
+
+    if (!startDate || !endDate) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    const isAvailable = await availabilityService.checkAvailability(
+      workspaceId,
+      new Date(startDate),
+      new Date(endDate)
+    );
+
+    res.json({ available: isAvailable });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to check availability' });
+  }
+});
+
+// Create availability slot (host only)
+router.post('/workspaces/:workspaceId/availability', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const { workspaceId } = req.params;
+    const { startDate, endDate, isAvailable, recurringPattern, recurringCount } = req.body;
+
+    if (!startDate || !endDate) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    // Verify workspace ownership
+    const workspace = await workspaceService.getById(workspaceId);
+    if (!workspace) {
+      return res.status(404).json({ error: 'Workspace not found' });
+    }
+
+    if (workspace.owner_id !== req.userId!) {
+      return res.status(403).json({ error: 'You can only manage availability for your own workspaces' });
+    }
+
+    const slot = await availabilityService.create({
+      workspaceId,
+      startDate: new Date(startDate),
+      endDate: new Date(endDate),
+      isAvailable: isAvailable !== false,
+      recurringPattern,
+      recurringCount,
+      createdBy: req.userId!,
+    });
+
+    // Emit Socket.io event for availability update
+    emitToWorkspace(workspaceId, 'availability-updated', {
+      slot,
+      message: isAvailable ? 'Availability slot added' : 'Unavailability period added',
+    });
+
+    res.status(201).json(slot);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to create availability slot' });
+  }
+});
+
+// Update availability slot (host only)
+router.patch('/availability-slots/:id', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { startDate, endDate, isAvailable } = req.body;
+
+    // Get slot to check ownership
+    const slotResult = await query('SELECT * FROM availability_slots WHERE id = $1', [id]);
+    const slot = slotResult.rows[0];
+
+    if (!slot) {
+      return res.status(404).json({ error: 'Availability slot not found' });
+    }
+
+    // Verify workspace ownership
+    const workspace = await workspaceService.getById(slot.workspace_id);
+    if (workspace.owner_id !== req.userId!) {
+      return res.status(403).json({ error: 'You can only update your own availability slots' });
+    }
+
+    const updated = await availabilityService.update(id, {
+      startDate: startDate ? new Date(startDate) : undefined,
+      endDate: endDate ? new Date(endDate) : undefined,
+      isAvailable,
+    });
+
+    // Emit update event
+    emitToWorkspace(slot.workspace_id, 'availability-updated', {
+      slot: updated,
+      message: 'Availability slot updated',
+    });
+
+    res.json(updated);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update availability slot' });
+  }
+});
+
+// Delete availability slot (host only)
+router.delete('/availability-slots/:id', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    // Get slot to check ownership
+    const slotResult = await query('SELECT * FROM availability_slots WHERE id = $1', [id]);
+    const slot = slotResult.rows[0];
+
+    if (!slot) {
+      return res.status(404).json({ error: 'Availability slot not found' });
+    }
+
+    // Verify workspace ownership
+    const workspace = await workspaceService.getById(slot.workspace_id);
+    if (workspace.owner_id !== req.userId!) {
+      return res.status(403).json({ error: 'You can only delete your own availability slots' });
+    }
+
+    await availabilityService.delete(id);
+
+    // Emit update event
+    emitToWorkspace(slot.workspace_id, 'availability-updated', {
+      slot: null,
+      message: 'Availability slot removed',
+    });
+
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete availability slot' });
   }
 });
 

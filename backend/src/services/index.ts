@@ -233,3 +233,133 @@ export class PricingService {
     return Math.round(baseRate * multiplier * 100) / 100;
   }
 }
+
+export interface AvailabilitySlot {
+  id: string;
+  workspaceId: string;
+  startDate: Date;
+  endDate: Date;
+  isAvailable: boolean;
+  recurringPattern?: string; // 'daily', 'weekly', 'monthly'
+  recurringCount?: number;
+  createdBy: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export class AvailabilityService {
+  async getByWorkspace(workspaceId: string) {
+    const result = await query(
+      `SELECT * FROM availability_slots 
+       WHERE workspace_id = $1 
+       ORDER BY start_date ASC`,
+      [workspaceId]
+    );
+    return result.rows;
+  }
+
+  async checkAvailability(
+    workspaceId: string,
+    startDate: Date,
+    endDate: Date
+  ): Promise<boolean> {
+    // Check if there are any overlapping unavailable slots
+    const result = await query(
+      `SELECT COUNT(*) as count FROM availability_slots 
+       WHERE workspace_id = $1 
+       AND is_available = false 
+       AND (start_date, end_date) OVERLAPS ($2::timestamp, $3::timestamp)`,
+      [workspaceId, startDate, endDate]
+    );
+
+    const unavailableCount = parseInt(result.rows[0]?.count ?? 0);
+    
+    // Also check for overlapping bookings
+    const bookingResult = await query(
+      `SELECT COUNT(*) as count FROM bookings 
+       WHERE workspace_id = $1 
+       AND status IN ('confirmed', 'pending')
+       AND (start_date, end_date) OVERLAPS ($2::timestamp, $3::timestamp)`,
+      [workspaceId, startDate, endDate]
+    );
+
+    const bookingCount = parseInt(bookingResult.rows[0]?.count ?? 0);
+    
+    return unavailableCount === 0 && bookingCount === 0;
+  }
+
+  async create(slot: Omit<AvailabilitySlot, 'id' | 'createdAt' | 'updatedAt'>) {
+    const result = await query(
+      `INSERT INTO availability_slots 
+        (workspace_id, start_date, end_date, is_available, recurring_pattern, recurring_count, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING *`,
+      [
+        slot.workspaceId,
+        slot.startDate,
+        slot.endDate,
+        slot.isAvailable,
+        slot.recurringPattern || null,
+        slot.recurringCount || null,
+        slot.createdBy,
+      ]
+    );
+    return result.rows[0];
+  }
+
+  async update(id: string, updates: Partial<AvailabilitySlot>) {
+    const fields: string[] = [];
+    const values: any[] = [];
+    let paramIndex = 1;
+
+    if (updates.startDate !== undefined) {
+      fields.push(`start_date = $${paramIndex++}`);
+      values.push(updates.startDate);
+    }
+    if (updates.endDate !== undefined) {
+      fields.push(`end_date = $${paramIndex++}`);
+      values.push(updates.endDate);
+    }
+    if (updates.isAvailable !== undefined) {
+      fields.push(`is_available = $${paramIndex++}`);
+      values.push(updates.isAvailable);
+    }
+
+    if (fields.length === 0) return null;
+
+    fields.push(`updated_at = CURRENT_TIMESTAMP`);
+    values.push(id);
+
+    const result = await query(
+      `UPDATE availability_slots 
+       SET ${fields.join(', ')}
+       WHERE id = $${paramIndex}
+       RETURNING *`,
+      values
+    );
+
+    return result.rows[0];
+  }
+
+  async delete(id: string) {
+    const result = await query('DELETE FROM availability_slots WHERE id = $1', [id]);
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async getAvailableSlots(
+    workspaceId: string,
+    startDate: Date,
+    endDate: Date
+  ): Promise<AvailabilitySlot[]> {
+    const result = await query(
+      `SELECT * FROM availability_slots 
+       WHERE workspace_id = $1 
+       AND is_available = true
+       AND start_date >= $2 
+       AND end_date <= $3
+       ORDER BY start_date ASC`,
+      [workspaceId, startDate, endDate]
+    );
+    return result.rows;
+  }
+}

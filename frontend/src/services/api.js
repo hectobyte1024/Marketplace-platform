@@ -46,4 +46,14 @@ export const pricingService = {
         endDate,
     }),
 };
+export const availabilityService = {
+    getSlots: (workspaceId) => api.get(`/workspaces/${workspaceId}/availability`),
+    checkAvailability: (workspaceId, startDate, endDate) => api.post(`/workspaces/${workspaceId}/check-availability`, {
+        startDate,
+        endDate,
+    }),
+    createSlot: (workspaceId, data) => api.post(`/workspaces/${workspaceId}/availability`, data),
+    updateSlot: (id, data) => api.patch(`/availability-slots/${id}`, data),
+    deleteSlot: (id) => api.delete(`/availability-slots/${id}`),
+};
 export const healthCheck = () => api.get('/health');

@@ -33,3 +33,16 @@ export interface User {
   role: 'guest' | 'host' | 'admin';
   createdAt: Date;
 }
+
+export interface AvailabilitySlot {
+  id: string;
+  workspaceId: string;
+  startDate: Date | string;
+  endDate: Date | string;
+  isAvailable: boolean;
+  recurringPattern?: string;
+  recurringCount?: number;
+  createdBy: string;
+  createdAt: Date;
+  updatedAt: Date;
+}

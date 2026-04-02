@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { workspaceService } from '../services/api.js';
 import { WorkspaceForm } from '../components/WorkspaceForm.js';
 import { PricingRules } from '../components/PricingRules.js';
+import { AvailabilityCalendar } from '../components/AvailabilityCalendar.js';
 import type { Workspace } from '../types/index.js';
 
 export const MyWorkspaces: React.FC = () => {
@@ -12,6 +13,7 @@ export const MyWorkspaces: React.FC = () => {
   const [editingWorkspace, setEditingWorkspace] = useState<Workspace | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [showPricingId, setShowPricingId] = useState<string | null>(null);
+  const [showAvailabilityId, setShowAvailabilityId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchWorkspaces();
@@ -142,21 +144,27 @@ export const MyWorkspaces: React.FC = () => {
                     </div>
                   )}
 
-                  <div className="flex gap-2 mb-4">
+                  <div className="flex gap-2 mb-4 flex-wrap">
                     <button
                       onClick={() => {
                         setEditingWorkspace(workspace);
                         setShowForm(true);
                       }}
-                      className="flex-1 bg-blue-500 text-white py-2 rounded hover:bg-blue-600 text-sm"
+                      className="flex-1 min-w-20 bg-blue-500 text-white py-2 rounded hover:bg-blue-600 text-sm"
                     >
                       Edit
                     </button>
                     <button
                       onClick={() => setShowPricingId(showPricingId === workspace.id ? null : workspace.id)}
-                      className={`flex-1 ${showPricingId === workspace.id ? 'bg-purple-600' : 'bg-purple-500'} text-white py-2 rounded hover:bg-purple-600 text-sm`}
+                      className={`flex-1 min-w-24 ${showPricingId === workspace.id ? 'bg-purple-600' : 'bg-purple-500'} text-white py-2 rounded hover:bg-purple-600 text-sm`}
                     >
                       Pricing
+                    </button>
+                    <button
+                      onClick={() => setShowAvailabilityId(showAvailabilityId === workspace.id ? null : workspace.id)}
+                      className={`flex-1 min-w-24 ${showAvailabilityId === workspace.id ? 'bg-orange-600' : 'bg-orange-500'} text-white py-2 rounded hover:bg-orange-600 text-sm`}
+                    >
+                      Availability
                     </button>
                     {deleteConfirm === workspace.id ? (
                       <div className="flex-1 bg-red-100 rounded p-2 text-center">
@@ -179,7 +187,7 @@ export const MyWorkspaces: React.FC = () => {
                     ) : (
                       <button
                         onClick={() => setDeleteConfirm(workspace.id)}
-                        className="flex-1 bg-red-500 text-white py-2 rounded hover:bg-red-600 text-sm"
+                        className="flex-1 min-w-20 bg-red-500 text-white py-2 rounded hover:bg-red-600 text-sm"
                       >
                         Delete
                       </button>
@@ -189,6 +197,12 @@ export const MyWorkspaces: React.FC = () => {
                   {showPricingId === workspace.id && (
                     <div className="border-t pt-4 mt-4">
                       <PricingRules workspaceId={workspace.id} />
+                    </div>
+                  )}
+
+                  {showAvailabilityId === workspace.id && (
+                    <div className="border-t pt-4 mt-4">
+                      <AvailabilityCalendar workspaceId={workspace.id} />
                     </div>
                   )}
                 </div>

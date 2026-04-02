@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Workspace, Booking } from '../types/index.js';
-import { bookingService, pricingService } from '../services/api.js';
+import { bookingService, pricingService, availabilityService } from '../services/api.js';
 
 interface BookingFormProps {
   workspace: Workspace;
@@ -17,6 +17,7 @@ export const BookingForm: React.FC<BookingFormProps> = ({ workspace, onSuccess, 
   const [error, setError] = useState('');
   const [calculatedPrice, setCalculatedPrice] = useState<number | null>(null);
   const [pricingDetails, setPricingDetails] = useState<any>(null);
+  const [availabilityStatus, setAvailabilityStatus] = useState<'checking' | 'available' | 'unavailable' | null>(null);
 
   // Calculate price whenever dates change
   useEffect(() => {
@@ -24,6 +25,7 @@ export const BookingForm: React.FC<BookingFormProps> = ({ workspace, onSuccess, 
       if (!startDate || !endDate || !startTime || !endTime) {
         setCalculatedPrice(null);
         setPricingDetails(null);
+        setAvailabilityStatus(null);
         return;
       }
 
@@ -33,14 +35,22 @@ export const BookingForm: React.FC<BookingFormProps> = ({ workspace, onSuccess, 
 
         if (start >= end) {
           setCalculatedPrice(null);
+          setAvailabilityStatus(null);
           return;
         }
 
+        // Check availability
+        setAvailabilityStatus('checking');
+        const availRes = await availabilityService.checkAvailability(workspace.id, start, end);
+        setAvailabilityStatus(availRes.data.available ? 'available' : 'unavailable');
+
+        // Calculate price
         const response = await pricingService.calculatePrice(workspace.id, start, end);
         setCalculatedPrice(response.data.totalPrice);
         setPricingDetails(response.data);
       } catch (err) {
-        console.error('Price calculation error:', err);
+        console.error('Price/availability calculation error:', err);
+        setAvailabilityStatus('unavailable');
       }
     };
 
@@ -74,6 +84,12 @@ export const BookingForm: React.FC<BookingFormProps> = ({ workspace, onSuccess, 
 
       if (!calculatedPrice) {
         setError('Unable to calculate price');
+        setLoading(false);
+        return;
+      }
+
+      if (availabilityStatus !== 'available') {
+        setError('This workspace is not available for the selected dates');
         setLoading(false);
         return;
       }
@@ -193,6 +209,18 @@ export const BookingForm: React.FC<BookingFormProps> = ({ workspace, onSuccess, 
               <span className="text-gray-400">Select dates</span>
             )}
           </div>
+
+          {availabilityStatus && (
+            <div className={`pt-2 border-t text-sm font-medium flex items-center gap-2 ${
+              availabilityStatus === 'checking' ? 'text-gray-600' :
+              availabilityStatus === 'available' ? 'text-green-600' :
+              'text-red-600'
+            }`}>
+              {availabilityStatus === 'checking' && <span>🔄 Checking availability...</span>}
+              {availabilityStatus === 'available' && <span>✓ Available for these dates</span>}
+              {availabilityStatus === 'unavailable' && <span>✗ Not available for these dates</span>}
+            </div>
+          )}
         </div>
 
         {error && (
@@ -204,7 +232,7 @@ export const BookingForm: React.FC<BookingFormProps> = ({ workspace, onSuccess, 
         <div className="flex gap-3 pt-4">
           <button
             type="submit"
-            disabled={loading || !totalPrice}
+            disabled={loading || !totalPrice || availabilityStatus !== 'available'}
             className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition"
           >
             {loading ? 'Creating booking...' : 'Complete Booking'}
