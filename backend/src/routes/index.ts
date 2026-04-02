@@ -2,6 +2,7 @@ import express, { Request, Response } from 'express';
 import { query } from '../database/connection.js';
 import { WorkspaceService, BookingService, UserService } from '../services/index.js';
 import authRoutes, { authMiddleware } from './auth.js';
+import { emitToUser, emitToWorkspace, broadcastBookingUpdate } from '../socket.js';
 
 const router = express.Router();
 const workspaceService = new WorkspaceService();
@@ -201,6 +202,20 @@ router.post('/bookings', authMiddleware, async (req: Request, res: Response) => 
       status: 'pending',
     });
     
+    // Emit Socket.io events
+    // Notify the booking creator
+    emitToUser(req.userId!, 'booking-created', {
+      booking,
+      message: `Your booking for ${workspace.name} is pending host confirmation`,
+    });
+    
+    // Notify the workspace host of new pending booking
+    emitToUser(workspace.owner_id, 'new-booking', {
+      booking,
+      workspace,
+      message: `New booking request for ${workspace.name}`,
+    });
+    
     res.status(201).json(booking);
   } catch (error) {
     console.error('Booking creation error:', error);
@@ -238,6 +253,34 @@ router.patch('/bookings/:id/status', authMiddleware, async (req: Request, res: R
     }
     
     const updated = await bookingService.updateStatus(bookingId, status);
+    
+    // Emit Socket.io events
+    const workspace = await workspaceService.getById(booking.workspace_id);
+    
+    if (status === 'confirmed') {
+      // Notify guest that booking was confirmed
+      emitToUser(booking.guest_id, 'booking-confirmed', {
+        bookingId,
+        message: `Your booking has been confirmed by ${workspace.name}!`,
+        booking: updated,
+      });
+    } else if (status === 'cancelled') {
+      // Notify other party of cancellation
+      const recipientId = booking.guest_id === req.userId! ? workspace.owner_id : booking.guest_id;
+      emitToUser(recipientId, 'booking-cancelled', {
+        bookingId,
+        message: 'A booking has been cancelled',
+        booking: updated,
+      });
+    }
+    
+    // Broadcast to workspace for availability updates
+    broadcastBookingUpdate(bookingId, booking.workspace_id, {
+      status,
+      startDate: booking.start_date,
+      endDate: booking.end_date,
+    });
+    
     res.json(updated);
   } catch (error) {
     res.status(500).json({ error: 'Failed to update booking' });

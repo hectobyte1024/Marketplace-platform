@@ -12,6 +12,9 @@ export const useBookingStore = create((set) => ({
         bookings: state.bookings.filter((b) => b.id !== id),
     })),
     setBookings: (bookings) => set({ bookings }),
+    updateBooking: (id, updates) => set((state) => ({
+        bookings: state.bookings.map((b) => b.id === id ? { ...b, ...updates } : b),
+    })),
 }));
 export const useUserStore = create((set) => ({
     user: null,
@@ -31,4 +34,21 @@ export const useUserStore = create((set) => ({
         localStorage.removeItem('token');
         set({ user: null, token: null, isAuthenticated: false });
     },
+}));
+export const useNotificationStore = create((set) => ({
+    notifications: [],
+    addNotification: (notification) => set((state) => ({
+        notifications: [
+            ...state.notifications,
+            {
+                id: Date.now().toString(),
+                timestamp: Date.now(),
+                ...notification,
+            },
+        ],
+    })),
+    removeNotification: (id) => set((state) => ({
+        notifications: state.notifications.filter((n) => n.id !== id),
+    })),
+    clearNotifications: () => set({ notifications: [] }),
 }));

@@ -1,12 +1,15 @@
 import express, { Express, Request, Response, NextFunction } from 'express';
+import http from 'http';
 import cors from 'cors';
 import * as dotenv from 'dotenv';
 import initSchema from './database/schema.js';
 import router from './routes/index.js';
+import { initializeSocket } from './socket.js';
 
 dotenv.config();
 
 const app: Express = express();
+const server = http.createServer(app);
 const PORT = process.env.PORT || 3000;
 
 // Middleware
@@ -28,7 +31,11 @@ const startServer = async () => {
     console.log('Initializing database schema...');
     await initSchema();
     
-    app.listen(PORT, () => {
+    // Initialize Socket.io
+    initializeSocket(server);
+    console.log('✓ Socket.io initialized');
+    
+    server.listen(PORT, () => {
       console.log(`✓ Server running on port ${PORT}`);
       console.log(`✓ API available at http://localhost:${PORT}/api`);
     });
