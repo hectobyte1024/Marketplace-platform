@@ -3,6 +3,7 @@ import { workspaceService } from '../services/api.js';
 import { WorkspaceForm } from '../components/WorkspaceForm.js';
 import { PricingRules } from '../components/PricingRules.js';
 import { AvailabilityCalendar } from '../components/AvailabilityCalendar.js';
+import { AnalyticsPage } from './Analytics.js';
 import type { Workspace } from '../types/index.js';
 
 export const MyWorkspaces: React.FC = () => {
@@ -14,6 +15,7 @@ export const MyWorkspaces: React.FC = () => {
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [showPricingId, setShowPricingId] = useState<string | null>(null);
   const [showAvailabilityId, setShowAvailabilityId] = useState<string | null>(null);
+  const [showAnalyticsId, setShowAnalyticsId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchWorkspaces();
@@ -166,30 +168,40 @@ export const MyWorkspaces: React.FC = () => {
                     >
                       Availability
                     </button>
+                    <button
+                      onClick={() => setShowAnalyticsId(showAnalyticsId === workspace.id ? null : workspace.id)}
+                      className={`flex-1 min-w-24 ${showAnalyticsId === workspace.id ? 'bg-teal-600' : 'bg-teal-500'} text-white py-2 rounded hover:bg-teal-600 text-sm`}
+                    >
+                      Analytics
+                    </button>
+                  </div>
+
+                  {/* Delete button on second row */}
+                  <div className="flex gap-2 mb-4">
                     {deleteConfirm === workspace.id ? (
                       <div className="flex-1 bg-red-100 rounded p-2 text-center">
-                        <p className="text-xs mb-1 font-medium">Sure?</p>
+                        <p className="text-xs mb-1 font-medium">Delete workspace?</p>
                         <div className="flex gap-1">
                           <button
                             onClick={() => handleDelete(workspace.id)}
                             className="flex-1 bg-red-600 text-white text-xs py-1 rounded hover:bg-red-700"
                           >
-                            Yes
+                            Yes, Delete
                           </button>
                           <button
                             onClick={() => setDeleteConfirm(null)}
                             className="flex-1 bg-gray-400 text-white text-xs py-1 rounded hover:bg-gray-500"
                           >
-                            No
+                            Cancel
                           </button>
                         </div>
                       </div>
                     ) : (
                       <button
                         onClick={() => setDeleteConfirm(workspace.id)}
-                        className="flex-1 min-w-20 bg-red-500 text-white py-2 rounded hover:bg-red-600 text-sm"
+                        className="flex-1 bg-red-500 text-white py-2 rounded hover:bg-red-600 text-sm"
                       >
-                        Delete
+                        Delete Workspace
                       </button>
                     )}
                   </div>
@@ -203,6 +215,16 @@ export const MyWorkspaces: React.FC = () => {
                   {showAvailabilityId === workspace.id && (
                     <div className="border-t pt-4 mt-4">
                       <AvailabilityCalendar workspaceId={workspace.id} />
+                    </div>
+                  )}
+
+                  {showAnalyticsId === workspace.id && (
+                    <div className="border-t pt-4 mt-4">
+                      <AnalyticsPage
+                        workspaceId={workspace.id}
+                        workspaceName={workspace.name}
+                        onClose={() => setShowAnalyticsId(null)}
+                      />
                     </div>
                   )}
                 </div>

@@ -363,3 +363,151 @@ export class AvailabilityService {
     return result.rows;
   }
 }
+
+export interface AnalyticsSummary {
+  totalRevenue: number;
+  averageBookingValue: number;
+  totalBookings: number;
+  confirmedBookings: number;
+  cancelledBookings: number;
+  occupancyRate: number;
+  bookingHours: number;
+  totalAvailableHours: number;
+}
+
+export interface AnalyticsTrend {
+  date: string;
+  revenue: number;
+  bookings: number;
+  occupancyPercent: number;
+}
+
+export class AnalyticsService {
+  async getSummary(workspaceId: string, days: number = 30): Promise<AnalyticsSummary> {
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+
+    // Get revenue and booking stats
+    const bookingResult = await query(
+      `SELECT 
+        SUM(total_price) as total_revenue,
+        AVG(total_price) as avg_price,
+        COUNT(*) as total_bookings,
+        SUM(CASE WHEN status = 'confirmed' THEN 1 ELSE 0 END) as confirmed,
+        SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled,
+        SUM(EXTRACT(EPOCH FROM (end_date - start_date)) / 3600) as booking_hours
+       FROM bookings 
+       WHERE workspace_id = $1 
+       AND created_at >= $2 
+       AND status IN ('confirmed', 'cancelled', 'completed')`,
+      [workspaceId, startDate]
+    );
+
+    const bookingData = bookingResult.rows[0];
+
+    // Get workspace details for available hours calculation
+    const workspaceResult = await query(
+      'SELECT hourly_rate FROM workspaces WHERE id = $1',
+      [workspaceId]
+    );
+    const workspace = workspaceResult.rows[0];
+
+    // Calculate total available hours in the period
+    const totalDays = days;
+    const totalAvailableHours = totalDays * 24;
+
+    const totalRevenue = parseFloat(bookingData.total_revenue) || 0;
+    const bookingHours = parseFloat(bookingData.booking_hours) || 0;
+    const occupancyRate = totalAvailableHours > 0 ? (bookingHours / totalAvailableHours) * 100 : 0;
+
+    return {
+      totalRevenue: Math.round(totalRevenue * 100) / 100,
+      averageBookingValue: parseFloat(bookingData.avg_price) || 0,
+      totalBookings: parseInt(bookingData.total_bookings) || 0,
+      confirmedBookings: parseInt(bookingData.confirmed) || 0,
+      cancelledBookings: parseInt(bookingData.cancelled) || 0,
+      occupancyRate: Math.round(occupancyRate * 100) / 100,
+      bookingHours: Math.round(bookingHours * 100) / 100,
+      totalAvailableHours,
+    };
+  }
+
+  async getTrends(workspaceId: string, days: number = 30): Promise<AnalyticsTrend[]> {
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+
+    const result = await query(
+      `SELECT 
+        DATE(start_date) as date,
+        SUM(CASE WHEN status IN ('confirmed', 'completed') THEN total_price ELSE 0 END) as revenue,
+        COUNT(CASE WHEN status IN ('confirmed', 'completed') THEN 1 END) as bookings,
+        SUM(EXTRACT(EPOCH FROM (end_date - start_date)) / 3600) as booking_hours
+       FROM bookings 
+       WHERE workspace_id = $1 
+       AND start_date >= $2
+       GROUP BY DATE(start_date)
+       ORDER BY DATE(start_date) ASC`,
+      [workspaceId, startDate]
+    );
+
+    // Calculate occupancy percent for each day
+    const trends = result.rows.map((row: any) => ({
+      date: row.date ? new Date(row.date).toISOString().split('T')[0] : '',
+      revenue: Math.round(parseFloat(row.revenue) || 0 * 100) / 100,
+      bookings: parseInt(row.bookings) || 0,
+      occupancyPercent: Math.round((parseFloat(row.booking_hours) || 0 / 24) * 100 * 100) / 100,
+    }));
+
+    return trends;
+  }
+
+  async getMonthlyRevenue(workspaceId: string, months: number = 6): Promise<any[]> {
+    const startDate = new Date();
+    startDate.setMonth(startDate.getMonth() - months);
+
+    const result = await query(
+      `SELECT 
+        DATE_TRUNC('month', start_date)::DATE as month,
+        SUM(CASE WHEN status IN ('confirmed', 'completed') THEN total_price ELSE 0 END) as revenue,
+        COUNT(CASE WHEN status IN ('confirmed', 'completed') THEN 1 END) as bookings
+       FROM bookings 
+       WHERE workspace_id = $1 
+       AND start_date >= $2
+       GROUP BY DATE_TRUNC('month', start_date)
+       ORDER BY DATE_TRUNC('month', start_date) DESC`,
+      [workspaceId, startDate]
+    );
+
+    return result.rows.map((row: any) => ({
+      month: row.month ? new Date(row.month).toISOString().split('T')[0] : '',
+      revenue: Math.round(parseFloat(row.revenue) || 0 * 100) / 100,
+      bookings: parseInt(row.bookings) || 0,
+    }));
+  }
+
+  async getTopHours(workspaceId: string, days: number = 30): Promise<any[]> {
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+
+    const result = await query(
+      `SELECT 
+        EXTRACT(HOUR FROM start_date) as hour,
+        COUNT(*) as bookings,
+        SUM(CASE WHEN status IN ('confirmed', 'completed') THEN total_price ELSE 0 END) as revenue
+       FROM bookings 
+       WHERE workspace_id = $1 
+       AND start_date >= $2
+       AND status IN ('confirmed', 'completed')
+       GROUP BY EXTRACT(HOUR FROM start_date)
+       ORDER BY bookings DESC
+       LIMIT 5`,
+      [workspaceId, startDate]
+    );
+
+    return result.rows.map((row: any) => ({
+      hour: parseInt(row.hour) || 0,
+      bookings: parseInt(row.bookings) || 0,
+      revenue: Math.round(parseFloat(row.revenue) || 0 * 100) / 100,
+    }));
+  }
+}

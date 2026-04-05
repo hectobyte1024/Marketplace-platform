@@ -46,3 +46,33 @@ export interface AvailabilitySlot {
   createdAt: Date;
   updatedAt: Date;
 }
+
+export interface AnalyticsSummary {
+  totalRevenue: number;
+  averageBookingValue: number;
+  totalBookings: number;
+  confirmedBookings: number;
+  cancelledBookings: number;
+  occupancyRate: number;
+  bookingHours: number;
+  totalAvailableHours: number;
+}
+
+export interface AnalyticsTrend {
+  date: string;
+  revenue: number;
+  bookings: number;
+  occupancyPercent: number;
+}
+
+export interface MonthlyRevenue {
+  month: string;
+  revenue: number;
+  bookings: number;
+}
+
+export interface TopHour {
+  hour: number;
+  bookings: number;
+  revenue: number;
+}

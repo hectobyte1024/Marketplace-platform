@@ -1,6 +1,6 @@
 import express, { Request, Response } from 'express';
 import { query } from '../database/connection.js';
-import { WorkspaceService, BookingService, UserService, PricingService, AvailabilityService } from '../services/index.js';
+import { WorkspaceService, BookingService, UserService, PricingService, AvailabilityService, AnalyticsService } from '../services/index.js';
 import authRoutes, { authMiddleware } from './auth.js';
 import { emitToUser, emitToWorkspace, broadcastBookingUpdate } from '../socket.js';
 
@@ -10,6 +10,7 @@ const bookingService = new BookingService();
 const userService = new UserService();
 const pricingService = new PricingService();
 const availabilityService = new AvailabilityService();
+const analyticsService = new AnalyticsService();
 
 // Mount auth routes
 router.use('/auth', authRoutes);
@@ -552,6 +553,95 @@ router.delete('/availability-slots/:id', authMiddleware, async (req: Request, re
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: 'Failed to delete availability slot' });
+  }
+});
+
+// Analytics - Host Dashboard
+router.get('/workspaces/:workspaceId/analytics/summary', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const { workspaceId } = req.params;
+    const { days } = req.query;
+
+    // Verify workspace ownership
+    const workspace = await workspaceService.getById(workspaceId);
+    if (!workspace) {
+      return res.status(404).json({ error: 'Workspace not found' });
+    }
+
+    if (workspace.owner_id !== req.userId!) {
+      return res.status(403).json({ error: 'You can only view analytics for your own workspaces' });
+    }
+
+    const summary = await analyticsService.getSummary(workspaceId, parseInt(days as string) || 30);
+    res.json(summary);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch analytics summary' });
+  }
+});
+
+router.get('/workspaces/:workspaceId/analytics/trends', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const { workspaceId } = req.params;
+    const { days } = req.query;
+
+    // Verify workspace ownership
+    const workspace = await workspaceService.getById(workspaceId);
+    if (!workspace) {
+      return res.status(404).json({ error: 'Workspace not found' });
+    }
+
+    if (workspace.owner_id !== req.userId!) {
+      return res.status(403).json({ error: 'You can only view analytics for your own workspaces' });
+    }
+
+    const trends = await analyticsService.getTrends(workspaceId, parseInt(days as string) || 30);
+    res.json(trends);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch analytics trends' });
+  }
+});
+
+router.get('/workspaces/:workspaceId/analytics/monthly', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const { workspaceId } = req.params;
+    const { months } = req.query;
+
+    // Verify workspace ownership
+    const workspace = await workspaceService.getById(workspaceId);
+    if (!workspace) {
+      return res.status(404).json({ error: 'Workspace not found' });
+    }
+
+    if (workspace.owner_id !== req.userId!) {
+      return res.status(403).json({ error: 'You can only view analytics for your own workspaces' });
+    }
+
+    const monthly = await analyticsService.getMonthlyRevenue(workspaceId, parseInt(months as string) || 6);
+    res.json(monthly);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch monthly analytics' });
+  }
+});
+
+router.get('/workspaces/:workspaceId/analytics/top-hours', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const { workspaceId } = req.params;
+    const { days } = req.query;
+
+    // Verify workspace ownership
+    const workspace = await workspaceService.getById(workspaceId);
+    if (!workspace) {
+      return res.status(404).json({ error: 'Workspace not found' });
+    }
+
+    if (workspace.owner_id !== req.userId!) {
+      return res.status(403).json({ error: 'You can only view analytics for your own workspaces' });
+    }
+
+    const topHours = await analyticsService.getTopHours(workspaceId, parseInt(days as string) || 30);
+    res.json(topHours);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch top hours' });
   }
 });
 

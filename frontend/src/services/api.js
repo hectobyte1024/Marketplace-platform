@@ -56,4 +56,10 @@ export const availabilityService = {
     updateSlot: (id, data) => api.patch(`/availability-slots/${id}`, data),
     deleteSlot: (id) => api.delete(`/availability-slots/${id}`),
 };
+export const analyticsService = {
+    getSummary: (workspaceId, days = 30) => api.get(`/workspaces/${workspaceId}/analytics/summary?days=${days}`),
+    getTrends: (workspaceId, days = 30) => api.get(`/workspaces/${workspaceId}/analytics/trends?days=${days}`),
+    getMonthlyRevenue: (workspaceId, months = 6) => api.get(`/workspaces/${workspaceId}/analytics/monthly?months=${months}`),
+    getTopHours: (workspaceId, days = 30) => api.get(`/workspaces/${workspaceId}/analytics/top-hours?days=${days}`),
+};
 export const healthCheck = () => api.get('/health');
